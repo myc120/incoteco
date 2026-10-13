@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Árbol Genealógico - Modo Texto</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: #fcfcfc;
+            color: #333;
+        }
+        h1, h2 { border-bottom: 2px solid #333; padding-bottom: 5px; }
+        .formulario {
+            background: #f0f0f0;
+            padding: 15px;
+            border: 1px dashed #333;
+            margin-bottom: 20px;
+        }
+        .campo { margin-bottom: 10px; }
+        label { display: inline-block; width: 150px; font-weight: bold; }
+        input, select { padding: 5px; width: 250px; font-family: monospace; }
+        button {
+            padding: 5px 15px;
+            cursor: pointer;
+            background: #333;
+            color: #fff;
+            border: none;
+        }
+        button:hover { background: #555; }
+        
+        /* Controles de visualización */
+        .controles-vista {
+            margin: 15px 0;
+            padding: 10px;
+            background: #e9e9e9;
+            border: 1px solid #ccc;
+        }
+        .controles-vista button {
+            background: #555;
+            margin-right: 5px;
+        }
+
+        .nodo-familiar {
+            margin-left: 30px;
+            border-left: 2px dotted #999;
+            padding-left: 15px;
+            margin-top: 10px;
+        }
+        .datos-persona {
+            background: #fff;
+            border: 1px solid #ccc;
+            padding: 8px;
+            display: inline-block;
+            min-width: 300px;
+        }
+        .editable {
+            background: #fffdf0;
+            border-bottom: 1px dashed #666;
+            padding: 2px 5px;
+        }
+        .btn-accion {
+            background: #e0e0e0;
+            color: #333;
+            font-size: 12px;
+            padding: 2px 6px;
+            margin-left: 5px;
+            border: 1px solid #aaa;
+        }
+        .btn-accion:hover { background: #cdcdcd; }
+        .btn-eliminar { background: #ffdddd; color: #a00; }
+        .btn-eliminar:hover { background: #ffbbbb; }
+        
+        /* Clase para ocultar los subniveles de forma dinámica */
+        .oculto {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🌳 Sistema de Control (Flujo de Trabajo)</h1>
+
+    <!-- Formulario para crear personas -->
+    <div class="formulario">
+        <h2>Agregar Items</h2>
+        <div class="campo">
+            <label for="nombre">Item:</label>
+            <input type="text" id="nombre" placeholder="Nombre del Item">
+        </div>
+        <div class="campo">
+            <label for="padre">Vínculo (Padre):</label>
+            <select id="padre">
+                <option value="">Ninguno (Raíz del árbol)</option>
+            </select>
+        </div>
+        <button onclick="crearPersona()">Agregar al Árbol</button>
+    </div>
+
+    <!-- Contenedor donde se dibuja el árbol -->
+    <h2>Estructura del Árbol</h2>
+    
+    <!-- NUEVO: Panel de controles globales para mostrar/ocultar todos los niveles -->
+    <div class="controles-vista">
+        <strong>Controles del Árbol:</strong>
+        <button onclick="alternarTodosLosNiveles(true)">Expandir Todo</button>
+        <button onclick="alternarTodosLosNiveles(false)">Contraer Todo</button>
+    </div>
+
+    <p><small>💡 Tip: Puedes hacer clic y editar directamente los nombres. Usa [+/-] para ocultar ramas individuales.</small></p>
+    <div id="arbolTexto"></div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            actualizarInterfaz();
+        });
+
+        function obtenerFamilia() {
+            const datos = localStorage.getItem("datosArbolGenealogico");
+            return datos ? JSON.parse(datos) : [];
+        }
+
+        function guardarFamilia(datos) {
+            localStorage.setItem("datosArbolGenealogico", JSON.stringify(datos));
+            actualizarInterfaz();
+        }
+
+        function crearPersona() {
+            const inputNombre = document.getElementById("nombre");
+            const selectPadre = document.getElementById("padre");
+            
+            const nombre = inputNombre.value.trim();
+            const padreId = selectPadre.value;
+
+            if (!nombre) {
+                alert("Por favor, ingresa un nombre.");
+                return;
+            }
+
+            const familia = obtenerFamilia();
+            
+            const nuevaPersona = {
+                id: "p_" + Date.now(),
+                nombre: nombre,
+                padreId: padreId || null
+            };
+
+            familia.push(nuevaPersona);
+            inputNombre.value = ""; 
+            
+            guardarFamilia(familia);
+        }
+
+        function modificarNombre(id, nuevoNombre) {
+            const familia = obtenerFamilia();
+            const persona = familia.find(p => p.id === id);
+            
+            if (persona && nuevoNombre.trim() !== "") {
+                persona.nombre = nuevoNombre.trim();
+                localStorage.setItem("datosArbolGenealogico", JSON.stringify(familia));
+                actualizarSelectorPadres(familia); 
+            }
+        }
+
+        function eliminarPersona(id) {
+            if (!confirm("¿Estás seguro de eliminar a esta persona? Sus descendientes quedarán sin conexión.")) {
+                return;
+            }
+            let familia = obtenerFamilia();
+            
+            familia = familia.filter(p => p.id !== id);
+            familia = familia.map(p => {
+                if (p.padreId === id) p.padreId = null;
+                return p;
+            });
+
+            guardarFamilia(familia);
+        }
+
+        function actualizarInterfaz() {
+            const familia = obtenerFamilia();
+            actualizarSelectorPadres(familia);
+            renderizarArbol(familia);
+        }
+
+        function actualizarSelectorPadres(familia) {
+            const select = document.getElementById("padre");
+            select.innerHTML = '<option value="">Ninguno (Raíz del árbol)</option>';
+            
+            familia.forEach(persona => {
+                const opcion = document.createElement("option");
+                opcion.value = persona.id;
+                opcion.textContent = persona.nombre;
+                select.appendChild(opcion);
+            });
+        }
+
+        // NUEVA FUNCIÓN: Contrae o expande todos los nodos que contienen hijos
+        function alternarTodosLosNiveles(expandir) {
+            // Buscamos todos los contenedores de hijos (clase .contenedor-hijos)
+            const contenedores = document.querySelectorAll(".contenedor-hijos");
+            // Buscamos todos los botones individuales de alternancia
+            const botones = document.querySelectorAll(".btn-alternar");
+
+            contenedores.forEach(contenedor => {
+                if (expandir) {
+                    contenedor.classList.remove("oculto");
+                } else {
+                    contenedor.classList.add("oculto");
+                }
+            });
+
+            botones.forEach(btn => {
+                btn.innerText = expandir ? "[-]" : "[+]";
+            });
+        }
+
+        // NUEVA FUNCIÓN: Alterna un nodo individual de forma manual
+        function alternarNodoIndividual(btn, contenedorId) {
+            const contenedor = document.getElementById(contenedorId);
+            if (contenedor.classList.contains("oculto")) {
+                contenedor.classList.remove("oculto");
+                btn.innerText = "[-]";
+            } else {
+                contenedor.classList.add("oculto");
+                btn.innerText = "[+]";
+            }
+        }
+
+        function renderizarArbol(familia) {
+            const contenedor = document.getElementById("arbolTexto");
+            contenedor.innerHTML = "";
+
+            const raíces = familia.filter(p => p.padreId === null);
+
+            if (familia.length === 0) {
+                contenedor.innerHTML = "<p>El árbol está vacío. Agrega a la primera persona.</p>";
+                return;
+            }
+
+            function dibujarPersona(persona, contenedorDestino) {
+                const divNodo = document.createElement("div");
+                divNodo.className = "nodo-familiar";
+
+                const divDatos = document.createElement("div");
+                divDatos.className = "datos-persona";
+
+                // Buscar si esta persona tiene hijos asignados
+                const hijos = familia.filter(p => p.padreId === persona.id);
+                const tieneHijos = hijos.length > 0;
+
+                // NUEVO: Botón individual para contraer/expandir esta rama específica
+                if (tieneHijos) {
+                    const btnAlternar = document.createElement("button");
+                    btnAlternar.innerText = "[-]";
+                    btnAlternar.className = "btn-accion btn-alternar";
+                    // Le asignamos un ID único al futuro contenedor de sus hijos
+                    const idContenidosHijos = "hijos_" + persona.id;
+                    btnAlternar.onclick = () => alternarNodoIndividual(btnAlternar, idContenidosHijos);
+                    divDatos.appendChild(btnAlternar);
+                }
+
+                // Texto del nombre (Editable)
+                const spanNombre = document.createElement("span");
+                spanNombre.className = "editable";
+                spanNombre.contentEditable = true;
+                spanNombre.innerText = persona.nombre;
+                spanNombre.onblur = () => modificarNombre(persona.id, spanNombre.innerText);
+
+                // Botón eliminar
+                const btnEliminar = document.createElement("button");
+                btnEliminar.innerText = "Eliminar";
+                btnEliminar.className = "btn-accion btn-eliminar";
+                btnEliminar.onclick = () => eliminarPersona(persona.id);
+                divDatos.appendChild(spanNombre);
+                divDatos.appendChild(btnEliminar);
+                divNodo.appendChild(divDatos);
+                // NUEVO: Si tiene hijos, creamos un contenedor aislado para ellos
+                if (tieneHijos) {
+                    const divHijos = document.createElement("div");
+                    divHijos.id = "hijos_" + persona.id;
+                    divHijos.className = "contenedor-hijos"; // Clase de control global
+                    hijos.forEach(hijo => {
+                        dibujarPersona(hijo, divHijos);
+                    });
+                    divNodo.appendChild(divHijos);
+                }
+                contenedorDestino.appendChild(divNodo);
+            }
+            raíces.forEach(raíz => {
+                dibujarPersona(raíz, contenedor);
+            });
+            // Mostrar también huérfanos de conexión rota si los hubiera
+            const idsValidos = familia.map(p => p.id);
+            const descolgados = familia.filter(p => p.padreId !== null && !idsValidos.includes(p.padreId));
+            if (descolgados.length > 0) {
+                const tituloDescolgados = document.createElement("h3");
+                tituloDescolgados.innerText = "Entradas sin conexión directa:";
+                contenedor.appendChild(tituloDescolgados);
+                descolgados.forEach(persona => {
+                    dibujarPersona(persona, contenedor);
+                });
+            }
+        }
+    </script>
+    <div class="controles-vista">
+        <strong>Ingeniero Ivan Munoz</strong>
+    </div>
+</body>
+</html>
